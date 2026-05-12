@@ -98,21 +98,56 @@ pip install -r requirements.txt
 
 ## Usage
 
-### Full experiment (recommended)
+### Mode A — Synthetic map (no video required, current default)
+
+Features are extracted from a procedurally generated overhead texture.
+Useful for algorithm demonstration when the MP4 is unavailable.
+
 ```bash
+# Full experiment in one command:
 python main.py --mode experiment --srt1 data/DJI_0017.SRT --srt2 data/DJI_0019.SRT
-```
 
-### Step-by-step
-
-**1. Preprocess** (parse SRT, build synthetic map, extract features, save database):
-```bash
+# Step-by-step:
 python main.py --mode preprocess --srt data/DJI_0017.SRT
+python main.py --mode navigate   --query data/DJI_0019.SRT --db out/geo_db.json
 ```
 
-**2. Navigate** (locate first 5 query frames and print errors):
+### Mode B — Real video (significantly better accuracy)
+
+When the paired MP4 files are available, pass them with `--video` / `--video1` /
+`--video2`. ORB features are then extracted from the actual camera frames instead of
+the synthetic texture. Real aerial images contain rich, location-specific texture
+(roads, buildings, field boundaries) that is completely absent from the synthetic map,
+reducing localisation error from ~160 m to the order of metres when the two flight
+paths overlap.
+
+**Important:** both the database and the query must use the same feature source.
+Matching real-video DB features against synthetic query features (or vice-versa) will
+not produce useful correspondences. Always supply both `--video1` and `--video2`
+together, or neither.
+
 ```bash
-python main.py --mode navigate --query data/DJI_0019.SRT --db out/geo_db.json
+# Full experiment with real video:
+python main.py --mode experiment \
+  --srt1 data/DJI_0017.SRT --srt2 data/DJI_0019.SRT \
+  --video1 data/DJI_0017.MP4 --video2 data/DJI_0019.MP4
+
+# Step-by-step with real video:
+python main.py --mode preprocess --srt data/DJI_0017.SRT --video data/DJI_0017.MP4
+python main.py --mode navigate   --query data/DJI_0019.SRT --db out/geo_db.json \
+                                 --video data/DJI_0019.MP4
+```
+
+`video_processor.py` extracts every 30th frame (≈ 1 fps) aligned to the SRT
+`frame_cnt` index so each real image corresponds to the telemetry entry it was paired
+with. Frames that cannot be read (seek error, truncated file) silently fall back to the
+synthetic map patch so the build never crashes mid-run.
+
+### Optional: custom output directory
+
+```bash
+python main.py --mode experiment --srt1 data/DJI_0017.SRT --srt2 data/DJI_0019.SRT \
+               --out-dir out/
 ```
 
 ---
@@ -123,7 +158,7 @@ python main.py --mode navigate --query data/DJI_0019.SRT --db out/geo_db.json
 |--------------------------------|--------------------------------------------------|
 | `out/synthetic_map.npy`        | Shared aerial texture used by both flights       |
 | `out/map_config.json`          | GPS bounding box for pixel↔GPS conversion        |
-| `out/geo_db.json`              | Frame metadata, keypoints, descriptor slice info |
+| `out/geo_db.json`              | Frame metadata, keypoints, descriptor slice info (`source`: `video`\|`synthetic`) |
 | `out/geo_db_desc.npy`          | Stacked ORB descriptors (N × 32, uint8)          |
 | `out/experiment_results.csv`   | Per-frame true vs. estimated position + error    |
 | `out/path_groundtruth.kml`     | GPS ground-truth flight path (green)             |

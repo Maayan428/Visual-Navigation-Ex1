@@ -3,12 +3,23 @@ import os
 
 import numpy as np
 
+from feature_extractor import extract_features_from_image
 
-def build_database(frames: list, extractor, out_dir: str):
+
+def build_database(frames: list, extractor, out_dir: str, video_frames: dict = None):
     """
     Build a geo-referenced ORB feature database from a list of footprint-augmented frames.
     Saves geo_db.json (metadata + keypoints) and geo_db_desc.npy (stacked descriptors).
     Returns (records, stacked_descriptors).
+
+    Parameters
+    ----------
+    frames       : footprint-augmented frame dicts from compute_all_footprints()
+    extractor    : FeatureExtractor instance (used when no real video frame is available)
+    out_dir      : directory to write geo_db.json and geo_db_desc.npy
+    video_frames : optional dict {frame_cnt -> grayscale ndarray} from video_processor.
+                   When a frame_cnt key exists the real image is used for ORB extraction;
+                   otherwise the synthetic map patch from extractor is used as fallback.
     """
     os.makedirs(out_dir, exist_ok=True)
 
@@ -22,8 +33,14 @@ def build_database(frames: list, extractor, out_dir: str):
         if (i + 1) % 50 == 0 or i == 0 or i == total - 1:
             print(f"\r  Processing frame {i+1}/{total}...", end='', flush=True)
 
-        patch = extractor.extract_patch(frame)
-        kp_ser, des = extractor.extract_features(patch)
+        fc = frame['frame_cnt']
+        if video_frames is not None and fc in video_frames:
+            kp_ser, des = extract_features_from_image(video_frames[fc])
+            source = 'video'
+        else:
+            patch = extractor.extract_patch(frame)
+            kp_ser, des = extractor.extract_features(patch)
+            source = 'synthetic'
 
         if des is None:
             skipped += 1
@@ -31,11 +48,12 @@ def build_database(frames: list, extractor, out_dir: str):
 
         n = des.shape[0]
         record = {
-            'frame_id':   frame['frame_cnt'],
+            'frame_id':   fc,
             'timestamp':  frame.get('timestamp', ''),
             'lat':        frame['lat'],
             'lon':        frame['lon'],
             'alt':        frame['rel_alt'],
+            'source':     source,
             'footprint': {
                 'center_lat':   frame['center_lat'],
                 'center_lon':   frame['center_lon'],
@@ -67,7 +85,10 @@ def build_database(frames: list, extractor, out_dir: str):
 
     np.save(npy_path, stacked)
 
+    n_video = sum(1 for r in records if r.get('source') == 'video')
+    n_synth = len(records) - n_video
     print(f"  Database: {len(records)} frames, {desc_cursor} keypoints")
+    print(f"  Sources: {n_video} real-video  |  {n_synth} synthetic")
     print(f"  Saved: {json_path}")
     print(f"  Saved: {npy_path}")
     if skipped:

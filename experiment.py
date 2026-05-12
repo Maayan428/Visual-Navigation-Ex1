@@ -29,14 +29,20 @@ def _write_kml(coords: list, path: str, name: str, color: str) -> None:
     kml.save(path)
 
 
-def run_experiment(srt1_path: str, srt2_path: str, out_dir: str) -> None:
+def run_experiment(srt1_path: str, srt2_path: str, out_dir: str,
+                   video_frames_db: dict = None,
+                   video_frames_query: dict = None) -> None:
     """
-    Full localization experiment:
-      - srt1 is used to build the geo-database (map source)
-      - srt2 frames are queried against the database (no GPS assumed)
-      - GPS from srt2 is used only as ground truth to measure error
+    Full localization experiment.
+
+    srt1 / video_frames_db   — database flight (DJI_0017)
+    srt2 / video_frames_query — query flight   (DJI_0019, GPS used only as ground truth)
+
+    When a video_frames dict is supplied the real camera images are used for ORB
+    extraction; otherwise synthetic map patches are used (current default behaviour).
+    For best matching accuracy both sides should use the same source type.
     """
-    from feature_extractor import FeatureExtractor
+    from feature_extractor import FeatureExtractor, extract_features_from_image
     from geo_database import build_database, load_database
     from navigator import Navigator
 
@@ -62,8 +68,15 @@ def run_experiment(srt1_path: str, srt2_path: str, out_dir: str) -> None:
     extractor  = FeatureExtractor(all_frames, out_dir)
 
     # ── Phase 3: build geo-database from srt1 ─────────────────────────────────
+    # ── Source-mismatch warning ────────────────────────────────────────────────
+    if video_frames_db is not None and video_frames_query is None:
+        print("WARNING: DB will use real video frames but no query video was provided.")
+        print("         ORB features from real video won't match synthetic patches.")
+        print("         Pass --video2 for consistent feature sources and better accuracy.")
+
     print("Extracting features and building geo-database...")
-    records, stacked = build_database(db_frames, extractor, out_dir)
+    records, stacked = build_database(db_frames, extractor, out_dir,
+                                      video_frames=video_frames_db)
 
     nav = Navigator(records, stacked)
 
@@ -80,8 +93,12 @@ def run_experiment(srt1_path: str, srt2_path: str, out_dir: str) -> None:
         true_lon = frame['lon']
         gt_path.append((true_lon, true_lat))
 
-        patch       = extractor.extract_patch(frame)
-        kp_ser, des = extractor.extract_features(patch)
+        fc = frame['frame_cnt']
+        if video_frames_query is not None and fc in video_frames_query:
+            kp_ser, des = extract_features_from_image(video_frames_query[fc])
+        else:
+            patch = extractor.extract_patch(frame)
+            kp_ser, des = extractor.extract_features(patch)
 
         if des is None:
             rows.append({
