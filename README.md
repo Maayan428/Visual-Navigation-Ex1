@@ -168,16 +168,34 @@ python main.py --mode experiment --srt1 data/DJI_0017.SRT --srt2 data/DJI_0019.S
 
 ## Results
 
-| Metric         | Value   |
-|----------------|---------|
-| Total frames   | 118     |
-| Located (%)    | 100.0%  |
-| Mean error (m) | 164.52  |
-| Median error   | 155.08  |
-| 90th pct (m)   | 310.69  |
-| Max error (m)  | 348.76  |
+### Mode A – Synthetic map (no video)
 
-Early frames (DJI_0019 start position overlaps DJI_0017 start) achieve ~16 m error. Higher errors occur where DJI_0019 traverses areas at the edge of DJI_0017's coverage, causing the navigator to fall back to less-geographically-close database frames.
+| Metric          | Value           |
+|-----------------|-----------------|
+| Located         | 118/118 (100%)  |
+| Mean error      | 164.52 m        |
+| Median error    | 155.08 m        |
+| 90th pct error  | 310.69 m        |
+| Max error       | 348.76 m        |
+| Mean confidence | 0.46            |
+
+### Mode B – Real video frames
+
+| Metric          | Value           |
+|-----------------|-----------------|
+| Located         | 118/118 (100%)  |
+| Mean error      | 139.50 m        |
+| Median error    | 100.65 m        |
+| 90th pct error  | 328.94 m        |
+| Max error       | 712.19 m        |
+| Mean confidence | 0.84            |
+
+**Note:** Median error drops 35% with real video (155 m → 101 m) and mean confidence
+nearly doubles (0.46 → 0.84), reflecting the richer, location-specific texture in real
+aerial frames. The higher max error in Mode B is caused by scale mismatch: DJI_0017
+ascends from 19 m to 120 m altitude while DJI_0019 flies a level pass at ~50 m, so
+DB frames captured at extreme altitudes produce ORB features at a very different apparent
+scale from the query, occasionally pulling the weighted-average estimate off course.
 
 ---
 
