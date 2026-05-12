@@ -1,0 +1,5 @@
+numpy>=1.26
+opencv-python>=4.9
+scipy>=1.12
+pandas>=2.1
+simplekml>=1.3
