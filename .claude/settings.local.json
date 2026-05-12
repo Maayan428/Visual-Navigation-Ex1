@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(/Users/maayanturgeman/Documents/Final_Year/visual_navigation/venv/bin/python3 -c ' *)"
-    ]
-  }
-}
