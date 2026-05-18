@@ -1,5 +1,5 @@
+import os
 import re
-from datetime import datetime
 
 
 def parse_srt(path: str) -> list:
@@ -16,9 +16,10 @@ def parse_srt(path: str) -> list:
         if len(lines) < 5:
             continue
 
-        # Line 2: strip HTML font tag → "FrameCnt: N, DiffTime: Xms"
+        # Line 2: strip HTML font tag → "FrameCnt: N, ..." or "SrtCnt : N, ..."
+        # Both DJI formats are handled; spaces around the colon are optional.
         fc_line = re.sub(r'<[^>]+>', '', lines[2]).strip()
-        m = re.search(r'FrameCnt:\s*(\d+)', fc_line)
+        m = re.search(r'(?:FrameCnt|SrtCnt)\s*:\s*(\d+)', fc_line)
         if not m:
             continue
         frame_cnt = int(m.group(1))
@@ -42,6 +43,15 @@ def parse_srt(path: str) -> list:
         record['timestamp'] = timestamp
         frames.append(record)
 
+    # Filter out frames where GPS has not yet been acquired (lat/lon == 0).
+    # This happens when the drone is still on the ground before lock.
+    before = len(frames)
+    frames = [f for f in frames if f['lat'] != 0.0 and f['lon'] != 0.0]
+    dropped = before - len(frames)
+    if dropped:
+        print(f"  [{os.path.basename(path)}] Dropped {dropped} zero-GPS frames "
+              f"({before} sampled → {len(frames)} kept)")
+
     return frames
 
 
@@ -49,8 +59,9 @@ def _parse_telemetry(line: str) -> dict:
     """Extract all telemetry fields from a single telemetry line."""
     record = {}
 
-    # Simple bracketed fields: [key: value] where value has no spaces
-    for m in re.finditer(r'\[(\w+):\s*([^\]\s]+)\]', line):
+    # Simple bracketed fields: [key: value] or [key : value] (both DJI formats).
+    # Commas are excluded from the value so [dzoom_ratio: 10000, delta:0] is skipped.
+    for m in re.finditer(r'\[(\w+)\s*:\s*([^\]\s,]+)\]', line):
         key, val = m.group(1), m.group(2)
         if key == 'iso':
             record['iso'] = int(val)

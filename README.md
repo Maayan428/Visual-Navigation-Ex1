@@ -197,6 +197,23 @@ ascends from 19 m to 120 m altitude while DJI_0019 flies a level pass at ~50 m, 
 DB frames captured at extreme altitudes produce ORB features at a very different apparent
 scale from the query, occasionally pulling the weighted-average estimate off course.
 
+### Mode A – Instructor videos DJI_0006/0007 (Synthetic map)
+
+| Metric         | Value          |
+|----------------|----------------|
+| Total frames   | 260            |
+| Located        | 236 (90.8%)    |
+| Mean error     | 169.61 m       |
+| Median error   | 28.77 m        |
+| 90th pct error | 546.95 m       |
+| Max error      | 661.72 m       |
+
+**Note:** Median error of 28.77 m shows strong localisation for frames where the two
+flight paths overlap. The 90.8% location rate (vs 100% for DJI_0017/0019) reflects 24
+unlocated frames where DJI_0007's 117 m cruise altitude produces features at a
+different apparent scale from DJI_0006's lower-altitude takeoff segments, causing
+RANSAC to reject all homography candidates.
+
 ---
 
 ## Known Limitations
