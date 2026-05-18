@@ -150,6 +150,34 @@ python main.py --mode experiment --srt1 data/DJI_0017.SRT --srt2 data/DJI_0019.S
                --out-dir out/
 ```
 
+### Camera center path (assignment requirement)
+
+`camera_path.py` computes the GPS coordinate of the **camera center point on the ground**
+for each sampled frame — i.e. where the camera's optical axis intersects the ground plane.
+This is the primary position estimate the assignment asks for, as opposed to the raw drone
+GPS position which is offset horizontally whenever the gimbal is tilted.
+
+```bash
+# Default pitch -60° (30° from nadir), output to out/
+python3 camera_path.py --srt data/DJI_0006.SRT --pitch -60 --out-dir out/
+
+# Nadir (straight down) — camera point = drone position
+python3 camera_path.py --srt data/DJI_0017.SRT --pitch -90 --out-dir out/
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--srt` | `data/DJI_0017.SRT` | Path to DJI SRT telemetry file |
+| `--pitch` | `-60` | Gimbal pitch in DJI convention (0 = horizontal, −90 = nadir) |
+| `--out-dir` | `out/` | Output directory for KML files |
+
+Outputs two KML files for side-by-side comparison in Google Earth:
+- `out/drone_path.kml` — raw GPS positions of the drone (blue)
+- `out/camera_path.kml` — ground points directly below the camera center ray (orange)
+
+At pitch = −60° the horizontal offset is `alt × tan(30°) ≈ 0.577 × alt`, so a drone
+flying at 50 m altitude places its camera center point ~29 m ahead along the flight heading.
+
 ---
 
 ## Output Files
