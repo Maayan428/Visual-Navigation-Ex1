@@ -17,24 +17,8 @@ import numpy as np
 
 
 def extract_video_frames(video_path: str, sample_every: int = 30) -> dict:
-    """
-    Extract one frame per second from an MP4, aligned to DJI SRT frame_cnt indices.
-
-    SRT frame_cnt is 1-indexed. The SRT parser retains frames where
-    (frame_cnt - 1) % sample_every == 0, i.e. frame_cnt = 1, 31, 61, …
-    The corresponding 0-indexed video positions are 0, 30, 60, …
-
-    Parameters
-    ----------
-    video_path   : path to the MP4 file
-    sample_every : frames between samples (default 30, matching SRT parser)
-
-    Returns
-    -------
-    dict mapping frame_cnt (int) → grayscale uint8 ndarray of shape (H, W).
-    Frames that could not be read (seek error, corrupted) are silently omitted;
-    geo_database.build_database() will fall back to the synthetic patch for those.
-    """
+    """Extract one frame per second from an MP4, keyed by SRT frame_cnt (1, 31, 61, …).
+    Returns {frame_cnt: grayscale ndarray}; unreadable frames are silently omitted."""
     if not os.path.exists(video_path):
         raise FileNotFoundError(f"Video file not found: {video_path}")
 

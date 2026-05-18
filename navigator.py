@@ -24,19 +24,8 @@ class Navigator:
         self.bf      = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
 
     def locate(self, query_kp_ser: list, query_des: np.ndarray) -> dict | None:
-        """
-        Find the most likely position of the query frame in the database.
-
-        Parameters
-        ----------
-        query_kp_ser : list of (x, y, size, angle, response, octave) tuples
-        query_des    : np.ndarray (N, 32) uint8 — ORB descriptors for query frame
-
-        Returns
-        -------
-        dict with est_lat, est_lon, confidence, total_inliers, top_matches
-        or None if no valid match found.
-        """
+        """Match query descriptors against the database and return a weighted-average position estimate.
+        Returns dict with est_lat, est_lon, confidence, total_inliers, top_matches; or None on failure."""
         if query_des is None or len(query_des) == 0:
             return None
 

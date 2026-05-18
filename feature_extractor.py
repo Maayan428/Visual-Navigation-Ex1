@@ -17,6 +17,7 @@ LAT_PER_M  = 1.0 / 111111.0
 
 
 def _lon_per_m(lat_deg: float) -> float:
+    """Degrees of longitude per metre at the given latitude."""
     return 1.0 / (111111.0 * math.cos(math.radians(lat_deg)))
 
 
@@ -69,10 +70,7 @@ class FeatureExtractor:
     """
 
     def __init__(self, all_frames: list, out_dir: str):
-        """
-        Build (or load) the overhead map from the GPS bounding box of all_frames.
-        all_frames should include frames from BOTH SRT files to cover the full area.
-        """
+        """Build or load the overhead map canvas covering all_frames' GPS bounding box."""
         self.out_dir  = out_dir
         self.cfg_path = os.path.join(out_dir, 'map_config.json')
         os.makedirs(out_dir, exist_ok=True)
@@ -164,6 +162,7 @@ class FeatureExtractor:
         return obj
 
     def _gps_to_pixel(self, lat: float, lon: float):
+        """Convert GPS coordinates to (row, col) pixel position in the map canvas."""
         row = int((self.lat_max - lat) / (self.lat_max - self.lat_min) * self._map_h)
         col = int((lon - self.lon_min) / (self.lon_max - self.lon_min) * self._map_w)
         return row, col
@@ -202,12 +201,7 @@ class FeatureExtractor:
         return patch
 
     def extract_features(self, patch: np.ndarray):
-        """
-        Run ORB on the patch.
-        Returns (kp_ser, descriptors) or (None, None) if no features found.
-        kp_ser: list of (x, y, size, angle, response, octave) tuples
-        descriptors: np.ndarray shape (N, 32) uint8
-        """
+        """Run ORB on patch; return (kp_ser, descriptors) or (None, None) if no features found."""
         orb = cv2.ORB_create(nfeatures=ORB_N)
         kp, des = orb.detectAndCompute(patch, None)
 

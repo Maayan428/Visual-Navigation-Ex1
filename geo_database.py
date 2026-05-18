@@ -7,20 +7,8 @@ from feature_extractor import extract_features_from_image
 
 
 def build_database(frames: list, extractor, out_dir: str, video_frames: dict = None):
-    """
-    Build a geo-referenced ORB feature database from a list of footprint-augmented frames.
-    Saves geo_db.json (metadata + keypoints) and geo_db_desc.npy (stacked descriptors).
-    Returns (records, stacked_descriptors).
-
-    Parameters
-    ----------
-    frames       : footprint-augmented frame dicts from compute_all_footprints()
-    extractor    : FeatureExtractor instance (used when no real video frame is available)
-    out_dir      : directory to write geo_db.json and geo_db_desc.npy
-    video_frames : optional dict {frame_cnt -> grayscale ndarray} from video_processor.
-                   When a frame_cnt key exists the real image is used for ORB extraction;
-                   otherwise the synthetic map patch from extractor is used as fallback.
-    """
+    """Build a geo-referenced ORB feature database from footprint-augmented frames.
+    Saves geo_db.json and geo_db_desc.npy; falls back to synthetic patches when video_frames is absent."""
     os.makedirs(out_dir, exist_ok=True)
 
     records        = []

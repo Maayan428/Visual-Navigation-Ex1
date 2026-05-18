@@ -42,6 +42,7 @@ def _load_video(path: str) -> dict:
 
 
 def cmd_preprocess(args, out_dir: str) -> None:
+    """Parse SRT, build synthetic map, extract ORB features, and write the geo-database."""
     from feature_extractor import FeatureExtractor
     from footprint import compute_all_footprints
     from geo_database import build_database
@@ -84,6 +85,7 @@ def cmd_preprocess(args, out_dir: str) -> None:
 
 
 def cmd_navigate(args, out_dir: str) -> None:
+    """Load the prebuilt database and run live frame-by-frame localization on the query SRT."""
     from experiment import haversine
     from feature_extractor import FeatureExtractor, extract_features_from_image
     from footprint import compute_all_footprints
@@ -138,6 +140,7 @@ def cmd_navigate(args, out_dir: str) -> None:
 
 
 def cmd_experiment(args, out_dir: str) -> None:
+    """Run the full experiment comparing two flights and report accuracy metrics."""
     from experiment import run_experiment
     os.makedirs(out_dir, exist_ok=True)
 
@@ -152,6 +155,7 @@ def cmd_experiment(args, out_dir: str) -> None:
 
 
 def main() -> None:
+    """Parse CLI args and dispatch to the appropriate subcommand."""
     parser = argparse.ArgumentParser(
         description='Ex1 – Drone Visual Navigation (GNSS-Denied)',
         formatter_class=argparse.RawDescriptionHelpFormatter,

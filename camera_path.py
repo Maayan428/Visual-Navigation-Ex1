@@ -47,6 +47,7 @@ LAT_PER_M = 1.0 / 111_111.0
 
 
 def _lon_per_m(lat_deg: float) -> float:
+    """Degrees of longitude per metre at the given latitude."""
     return 1.0 / (111_111.0 * math.cos(math.radians(lat_deg)))
 
 
@@ -68,12 +69,7 @@ def _forward_bearing(lat1: float, lon1: float, lat2: float, lon2: float) -> floa
 
 def _camera_center(lat: float, lon: float, alt: float,
                    heading_deg: float, tan_tilt: float) -> tuple:
-    """
-    Return (camera_lat, camera_lon, offset_m) — the ground point where the
-    camera center ray intersects the ground plane.
-
-    horizontal_offset = alt x tan(tilt_from_nadir)
-    """
+    """Ground point where the camera center ray hits the ground plane; returns (lat, lon, offset_m)."""
     offset_m  = alt * tan_tilt
     heading_r = math.radians(heading_deg)
     camera_lat = lat + offset_m * math.cos(heading_r) * LAT_PER_M
@@ -82,14 +78,8 @@ def _camera_center(lat: float, lon: float, alt: float,
 
 
 def compute_camera_centers(frames: list, pitch_deg: float = -60.0) -> list:
-    """
-    For each frame estimate the drone heading from consecutive GPS positions,
-    then compute the camera center ground point.
-
-    Returns a list of dicts with keys:
-      frame_cnt, timestamp, drone_lat, drone_lon, alt_m,
-      heading_deg, offset_m, camera_lat, camera_lon
-    """
+    """Compute camera center ground point for each frame using estimated heading.
+    Returns list of dicts with frame_cnt, drone position, heading_deg, offset_m, camera_lat/lon."""
     tilt     = _tilt_from_nadir(pitch_deg)
     tan_tilt = math.tan(math.radians(tilt))
 
@@ -140,6 +130,7 @@ def _write_kml(coords_lonlat: list, path: str, name: str, color: str) -> None:
 
 
 def run(srt_path: str, out_dir: str, pitch_deg: float = -60.0) -> list:
+    """Parse SRT, compute camera centers, and write drone + camera KML paths to out_dir."""
     os.makedirs(out_dir, exist_ok=True)
 
     print(f"Parsing {os.path.basename(srt_path)}...")

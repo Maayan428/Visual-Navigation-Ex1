@@ -28,7 +28,6 @@ def parse_srt(path: str) -> list:
         if (frame_cnt - 1) % 30 != 0:
             continue
 
-        # Line 3: timestamp
         timestamp = lines[3].strip()
 
         # Line 4: strip </font> → telemetry
@@ -87,7 +86,6 @@ def _parse_telemetry(line: str) -> dict:
         record['rel_alt'] = float(m.group(1))
         record['abs_alt'] = float(m.group(2))
 
-    # Validate required fields
     for field in ('lat', 'lon', 'rel_alt'):
         if field not in record:
             raise ValueError(f"Missing field: {field}")

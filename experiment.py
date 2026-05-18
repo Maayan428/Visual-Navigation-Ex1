@@ -14,7 +14,7 @@ def haversine(lat1: float, lon1: float, lat2: float, lon2: float, R: float = 6_3
     phi2 = math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
     dlam = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2  # spherical law of cosines
     return 2 * R * math.asin(math.sqrt(a))
 
 
@@ -32,16 +32,8 @@ def _write_kml(coords: list, path: str, name: str, color: str) -> None:
 def run_experiment(srt1_path: str, srt2_path: str, out_dir: str,
                    video_frames_db: dict = None,
                    video_frames_query: dict = None) -> None:
-    """
-    Full localization experiment.
-
-    srt1 / video_frames_db   — database flight (DJI_0017)
-    srt2 / video_frames_query — query flight   (DJI_0019, GPS used only as ground truth)
-
-    When a video_frames dict is supplied the real camera images are used for ORB
-    extraction; otherwise synthetic map patches are used (current default behaviour).
-    For best matching accuracy both sides should use the same source type.
-    """
+    """Run the full localization experiment: parse both SRTs, build DB from srt1, locate srt2 frames.
+    Outputs experiment_results.csv and two KML paths to out_dir."""
     from feature_extractor import FeatureExtractor, extract_features_from_image
     from geo_database import build_database, load_database
     from navigator import Navigator

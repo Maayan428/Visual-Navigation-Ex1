@@ -8,14 +8,12 @@ LAT_PER_M       = 1.0 / 111111.0
 
 
 def _lon_per_m(lat_deg: float) -> float:
+    """Degrees of longitude per metre at the given latitude."""
     return 1.0 / (111111.0 * math.cos(math.radians(lat_deg)))
 
 
 def compute_footprint(frame: dict) -> dict:
-    """
-    Compute nadir ground footprint for a single frame.
-    Returns a dict with center, dimensions, GSD, and 4 corner GPS coordinates.
-    """
+    """Nadir ground footprint for a single frame; returns center, dimensions, GSD, and corner GPS coords."""
     lat  = frame['lat']
     lon  = frame['lon']
     alt  = frame['rel_alt']
@@ -23,7 +21,7 @@ def compute_footprint(frame: dict) -> dict:
     if alt <= 0:
         alt = 0.1  # guard against zero division
 
-    gsd      = (alt * SENSOR_WIDTH_MM) / (FOCAL_LEN_MM * IMAGE_W)
+    gsd      = (alt * SENSOR_WIDTH_MM) / (FOCAL_LEN_MM * IMAGE_W)  # ground sample distance: metres per pixel at nadir
     width_m  = gsd * IMAGE_W
     height_m = gsd * IMAGE_H
 
