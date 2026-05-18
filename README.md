@@ -1,10 +1,19 @@
-# Ex1 - Visual Navigation for Drones (GNSS-Denied)
+# Ex1 – Visual Navigation for Drones (GNSS-Denied)
 
-A visual odometry system that estimates drone position using only camera-derived features — no GPS. Two DJI SRT telemetry files provide flight metadata and serve as ground truth for evaluation.
+## What This Project Does
 
----
+When a drone loses GPS signal, it has no way to know where it is. This project solves that problem using only the camera — no GPS, no IMU, no external signals. We pre-process a reference flight to build a visual map of the area, then match features from a new flight against that map to estimate position frame by frame.
 
-## Algorithm
+## How It Works
+
+**Stage 1 – Learning the area (preprocessing)**
+We take a reference flight (DJI_0017), sample one frame per second, and compute what patch of ground each frame covers. We extract up to 500 visual keypoints (ORB features) from each patch and store them in a geo-referenced database alongside their GPS coordinates.
+
+**Stage 2 – Navigating without GPS**
+For each frame in the query flight (DJI_0019), we extract the same kind of features and match them against every entry in the database. We use RANSAC to filter out bad matches geometrically, then estimate position as a weighted average of the top 3 matching database frames.
+
+**Stage 3 – Measuring accuracy**
+The query flight's GPS coordinates are hidden from the navigator and used only as ground truth. We compute the Haversine distance between the true and estimated position for each frame, then report mean, median, and worst-case error in metres.
 
 ```
 DJI_0017.SRT                        DJI_0019.SRT
@@ -51,183 +60,81 @@ DJI_0017.SRT                        DJI_0019.SRT
                               └───────────────────┘
 ```
 
-### Stage 1 – Preprocessing
-1. **SRT Parsing**: Read DJI telemetry, sample at 1 fps (every 30th frame).
-2. **Footprint Computation**: For each frame, compute ground coverage using GSD formula:
-   `GSD = (altitude × sensor_width) / (focal_length × image_width)` → corners in GPS.
-3. **Synthetic Map**: A shared 8000×4000 px overhead texture (checkerboard + blobs + rectangles,
-   seeded for reproducibility) covers the combined GPS bounding box of both flights.
-4. **ORB Feature Extraction**: Each DB frame's map crop is extracted, resized to 640×360,
-   and processed with ORB (500 features). Results stored in `geo_db.json` + `geo_db_desc.npy`.
-
-### Stage 2 – Navigation
-1. Query frame's map crop is extracted and ORB features are computed.
-2. BFMatcher (NORM_HAMMING) matches query descriptors against every DB frame.
-3. Lowe's ratio test (0.75) filters spurious matches.
-4. RANSAC homography counts geometric inliers per candidate.
-5. Position estimated as inlier-weighted average of top-3 DB frame positions.
-
-### Stage 3 – Experiment
-GPS coordinates from DJI_0019.SRT are withheld from the navigator and used only as ground truth.
-Haversine distance between true and estimated position gives the localisation error in metres.
-
 ---
 
-## Camera Constants
+## Quick Start
 
-| Parameter       | Value                        |
-|-----------------|------------------------------|
-| Camera          | DJI Mini 3 Pro               |
-| Sensor width    | 9.6 mm                       |
-| Focal length    | 8.8 mm (actual physical)     |
-| 35mm equivalent | 24 mm                        |
-| Image size      | 1920 × 1080 px               |
-| Camera angle    | −90° (nadir, straight down)  |
-
----
-
-## Installation
+### Install
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate          # Windows: venv\Scripts\activate
+git clone <repo>
+python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 ```
 
----
+### Run the experiment
 
-## Usage
-
-### Mode A — Synthetic map (no video required, current default)
-
-Features are extracted from a procedurally generated overhead texture.
-Useful for algorithm demonstration when the MP4 is unavailable.
+**Without video — works out of the box** (features come from a synthetic overhead texture):
 
 ```bash
-# Full experiment in one command:
 python main.py --mode experiment --srt1 data/DJI_0017.SRT --srt2 data/DJI_0019.SRT
-
-# Step-by-step:
-python main.py --mode preprocess --srt data/DJI_0017.SRT
-python main.py --mode navigate   --query data/DJI_0019.SRT --db out/geo_db.json
 ```
 
-### Mode B — Real video (significantly better accuracy)
-
-When the paired MP4 files are available, pass them with `--video` / `--video1` /
-`--video2`. ORB features are then extracted from the actual camera frames instead of
-the synthetic texture. Real aerial images contain rich, location-specific texture
-(roads, buildings, field boundaries) that is completely absent from the synthetic map,
-reducing localisation error from ~160 m to the order of metres when the two flight
-paths overlap.
-
-**Important:** both the database and the query must use the same feature source.
-Matching real-video DB features against synthetic query features (or vice-versa) will
-not produce useful correspondences. Always supply both `--video1` and `--video2`
-together, or neither.
+**With real video — better accuracy** (features come from actual camera frames):
 
 ```bash
-# Full experiment with real video:
 python main.py --mode experiment \
   --srt1 data/DJI_0017.SRT --srt2 data/DJI_0019.SRT \
   --video1 data/DJI_0017.MP4 --video2 data/DJI_0019.MP4
-
-# Step-by-step with real video:
-python main.py --mode preprocess --srt data/DJI_0017.SRT --video data/DJI_0017.MP4
-python main.py --mode navigate   --query data/DJI_0019.SRT --db out/geo_db.json \
-                                 --video data/DJI_0019.MP4
 ```
 
-`video_processor.py` extracts every 30th frame (≈ 1 fps) aligned to the SRT
-`frame_cnt` index so each real image corresponds to the telemetry entry it was paired
-with. Frames that cannot be read (seek error, truncated file) silently fall back to the
-synthetic map patch so the build never crashes mid-run.
+Always supply both `--video1` and `--video2` together, or neither — mixing real and synthetic features produces no useful matches.
 
-### Optional: custom output directory
+You can also run preprocessing and navigation as separate steps:
 
 ```bash
-python main.py --mode experiment --srt1 data/DJI_0017.SRT --srt2 data/DJI_0019.SRT \
-               --out-dir out/
+python main.py --mode preprocess --srt data/DJI_0017.SRT [--video data/DJI_0017.MP4]
+python main.py --mode navigate   --query data/DJI_0019.SRT --db out/geo_db.json [--video data/DJI_0019.MP4]
 ```
 
-### Camera center path (assignment requirement)
+### Compute where the camera is looking
 
-`camera_path.py` computes the GPS coordinate of the **camera center point on the ground**
-for each sampled frame — i.e. where the camera's optical axis intersects the ground plane.
-This is the primary position estimate the assignment asks for, as opposed to the raw drone
-GPS position which is offset horizontally whenever the gimbal is tilted.
+The drone's GPS position and where the camera actually points are different things — when the gimbal tilts forward, the camera looks tens of metres ahead of the drone. `camera_path.py` computes the exact ground coordinate the camera center ray hits for each frame.
 
 ```bash
-# Default pitch -60° (30° from nadir), output to out/
 python3 camera_path.py --srt data/DJI_0006.SRT --pitch -60 --out-dir out/
-
-# Nadir (straight down) — camera point = drone position
-python3 camera_path.py --srt data/DJI_0017.SRT --pitch -90 --out-dir out/
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--srt` | `data/DJI_0017.SRT` | Path to DJI SRT telemetry file |
-| `--pitch` | `-60` | Gimbal pitch in DJI convention (0 = horizontal, −90 = nadir) |
-| `--out-dir` | `out/` | Output directory for KML files |
+| `--srt` | `data/DJI_0017.SRT` | DJI SRT telemetry file |
+| `--pitch` | `-60` | Gimbal pitch in DJI convention (0 = horizontal, −90 = straight down) |
+| `--out-dir` | `out/` | Where to save KML files |
 
-Outputs two KML files for side-by-side comparison in Google Earth:
-- `out/drone_path.kml` — raw GPS positions of the drone (blue)
-- `out/camera_path.kml` — ground points directly below the camera center ray (orange)
-
-At pitch = −60° the horizontal offset is `alt × tan(30°) ≈ 0.577 × alt`, so a drone
-flying at 50 m altitude places its camera center point ~29 m ahead along the flight heading.
-
----
-
-## Output Files
-
-| File                           | Description                                      |
-|--------------------------------|--------------------------------------------------|
-| `out/synthetic_map.npy`        | Shared aerial texture used by both flights       |
-| `out/map_config.json`          | GPS bounding box for pixel↔GPS conversion        |
-| `out/geo_db.json`              | Frame metadata, keypoints, descriptor slice info (`source`: `video`\|`synthetic`) |
-| `out/geo_db_desc.npy`          | Stacked ORB descriptors (N × 32, uint8)          |
-| `out/experiment_results.csv`   | Per-frame true vs. estimated position + error    |
-| `out/path_groundtruth.kml`     | GPS ground-truth flight path (green)             |
-| `out/path_estimated.kml`       | Visually estimated flight path (red)             |
+This writes two KML files you can open in Google Earth side by side:
+- `drone_path.kml` — where the drone flew (blue)
+- `camera_path.kml` — what the camera was pointed at (orange)
 
 ---
 
 ## Results
 
-### Mode A – Synthetic map (no video)
+### On our flight data (DJI_0017 vs DJI_0019)
 
-| Metric          | Value           |
-|-----------------|-----------------|
-| Located         | 118/118 (100%)  |
-| Mean error      | 164.52 m        |
-| Median error    | 155.08 m        |
-| 90th pct error  | 310.69 m        |
-| Max error       | 348.76 m        |
-| Mean confidence | 0.46            |
+| Metric          | Synthetic map   | Real video      |
+|-----------------|-----------------|-----------------|
+| Located         | 118/118 (100%)  | 118/118 (100%)  |
+| Mean error      | 164.52 m        | 139.50 m        |
+| Median error    | 155.08 m        | 100.65 m        |
+| 90th pct error  | 310.69 m        | 328.94 m        |
+| Max error       | 348.76 m        | 712.19 m        |
+| Mean confidence | 0.46            | 0.84            |
 
-### Mode B – Real video frames
+Real video cuts median error by 35% and nearly doubles confidence, because actual aerial frames contain location-specific texture (roads, buildings, field edges) that a synthetic checkerboard cannot replicate. The higher max error in real-video mode comes from scale mismatch: the reference flight rises from 19 m to 120 m, so some database frames look very different in scale from the 50 m query frames.
 
-| Metric          | Value           |
-|-----------------|-----------------|
-| Located         | 118/118 (100%)  |
-| Mean error      | 139.50 m        |
-| Median error    | 100.65 m        |
-| 90th pct error  | 328.94 m        |
-| Max error       | 712.19 m        |
-| Mean confidence | 0.84            |
+### On instructor flight data (DJI_0006 vs DJI_0007)
 
-**Note:** Median error drops 35% with real video (155 m → 101 m) and mean confidence
-nearly doubles (0.46 → 0.84), reflecting the richer, location-specific texture in real
-aerial frames. The higher max error in Mode B is caused by scale mismatch: DJI_0017
-ascends from 19 m to 120 m altitude while DJI_0019 flies a level pass at ~50 m, so
-DB frames captured at extreme altitudes produce ORB features at a very different apparent
-scale from the query, occasionally pulling the weighted-average estimate off course.
-
-### Mode A – Instructor videos DJI_0006/0007 (Synthetic map)
-
-| Metric         | Value          |
+| Metric         | Synthetic map  |
 |----------------|----------------|
 | Total frames   | 260            |
 | Located        | 236 (90.8%)    |
@@ -236,18 +143,77 @@ scale from the query, occasionally pulling the weighted-average estimate off cou
 | 90th pct error | 546.95 m       |
 | Max error      | 661.72 m       |
 
-**Note:** Median error of 28.77 m shows strong localisation for frames where the two
-flight paths overlap. The 90.8% location rate (vs 100% for DJI_0017/0019) reflects 24
-unlocated frames where DJI_0007's 117 m cruise altitude produces features at a
-different apparent scale from DJI_0006's lower-altitude takeoff segments, causing
-RANSAC to reject all homography candidates.
+The 28 m median shows the system localises well when the two flight paths actually overlap. The 24 unlocated frames occur where DJI_0007 cruises at 117 m — too different in apparent scale from DJI_0006's lower-altitude takeoff for RANSAC to accept any match.
+
+### Best mode — Instructor videos with real video + satellite map
+
+| Metric | Value |
+|--------|-------|
+| Total frames | 260 |
+| Located | 260 (100%) |
+| Mean error | 130.33 m |
+| Median error | 83.12 m |
+| 90th pct error | 316.79 m |
+| Max error | 697.57 m |
+| Mean confidence | 0.95 |
+
+Real video frames from DJI_0006.MP4 + DJI_0007.MP4 matched against the real satellite map. This is the only configuration that achieves 100% location rate on the instructor data — combining real imagery in the database with real imagery in the query eliminates the feature mismatch that left 24 frames unlocated in synthetic mode. First frame error: 12.6 m at 98% confidence.
+
+---
+
+## Output Files
+
+| File | Description |
+|------|-------------|
+| `out/synthetic_map.npy` | Shared aerial texture used by both flights |
+| `out/map_config.json` | GPS bounding box for pixel ↔ GPS conversion |
+| `out/geo_db.json` | Frame metadata, keypoints, descriptor slice info (`source`: `video`\|`synthetic`) |
+| `out/geo_db_desc.npy` | Stacked ORB descriptors (N × 32, uint8) |
+| `out/experiment_results.csv` | Per-frame true vs. estimated position and error |
+| `out/path_groundtruth.kml` | GPS ground-truth flight path (green) |
+| `out/path_estimated.kml` | Visually estimated flight path (red) |
+
+---
+
+## Camera Specifications
+
+| Parameter | Value |
+|-----------|-------|
+| Camera | DJI Mini 3 Pro |
+| Sensor width | 9.6 mm |
+| Focal length | 8.8 mm (physical) |
+| 35mm equivalent | 24 mm |
+| Image size | 1920 × 1080 px |
+| Camera angle | −90° (nadir, straight down) |
+
+---
+
+## Literature Review
+
+See [literature_review.md](literature_review.md) for a full review of 5 state-of-the-art papers on visual navigation and place recognition, each with open-source implementations, plus a justification of the ORB + BFMatcher design choice.
 
 ---
 
 ## Known Limitations
 
-- **Synthetic imagery**: The navigation runs on a procedurally-generated overhead texture, not real video frames. Results reflect the algorithm's geometric correctness, not real-world photometric performance.
-- **Scale change**: DJI_0017 ascends from 19.6 m to 120.4 m altitude. DB frames captured at very different altitudes than the 49.8 m query frames will produce lower inlier counts (different apparent scale).
-- **No rotation correction**: Nadir camera is assumed; drone yaw is not compensated. Slight heading differences between flights may reduce inlier counts.
-- **Linear complexity**: The navigator iterates all DB frames per query. For large databases, a spatial index (e.g., KD-tree on GPS) would improve speed.
-- **No loop closure**: Positions are estimated independently per frame; no trajectory smoothing is applied.
+- **Synthetic texture**: The default mode runs on a procedurally generated map, not real photos — results show geometric correctness, not real-world performance.
+- **Scale mismatch**: A database frame shot at 120 m looks very different from a query frame at 50 m, which hurts match quality at altitude extremes.
+- **No yaw correction**: The system assumes the camera points straight down and doesn't compensate for drone heading differences between flights.
+- **Linear search**: Every query frame checks every database frame, which gets slow for large databases — a spatial index would fix this.
+- **No trajectory smoothing**: Each frame's position is estimated independently; a Kalman filter or similar would reduce noise across frames.
+
+---
+
+## File Structure
+
+| File | What it does |
+|------|--------------|
+| `srt_parser.py` | Reads DJI SRT telemetry files (supports both format variants) and samples at 1 fps |
+| `footprint.py` | Computes the ground footprint (width, height, corners) for each frame using the GSD formula |
+| `feature_extractor.py` | Builds the shared synthetic map and extracts ORB features from map patches |
+| `geo_database.py` | Builds and loads the geo-referenced feature database (`geo_db.json` + `geo_db_desc.npy`) |
+| `navigator.py` | Matches query features against the database using BFMatcher + RANSAC and estimates position |
+| `experiment.py` | Runs the full end-to-end experiment and computes localisation error against GPS ground truth |
+| `video_processor.py` | Extracts 1 fps frames from an MP4 file, aligned to SRT frame indices |
+| `camera_path.py` | Computes the ground coordinate the camera center ray hits for each frame |
+| `main.py` | CLI entry point for `preprocess`, `navigate`, and `experiment` modes |

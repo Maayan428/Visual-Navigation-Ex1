@@ -61,76 +61,111 @@ def _build_map() -> np.ndarray:
 
 class FeatureExtractor:
     """
-    Extracts ORB features from geo-referenced synthetic overhead patches.
-    Both the database build and navigation queries use the same shared map
-    so that overlapping footprints produce matching features.
+    Extracts ORB features from geo-referenced overhead patches.
+    Uses a real satellite map (real_map.png) when available; falls back to a
+    procedurally generated synthetic texture otherwise.  Both the database build
+    and navigation queries share the same canvas so overlapping footprints
+    produce matching features.
     """
 
     def __init__(self, all_frames: list, out_dir: str):
         """
-        Build (or load cached) synthetic map from the GPS bounding box of all_frames.
-        all_frames must contain frames from BOTH SRT files to cover the full area.
+        Build (or load) the overhead map from the GPS bounding box of all_frames.
+        all_frames should include frames from BOTH SRT files to cover the full area.
         """
         self.out_dir  = out_dir
-        self.map_path = os.path.join(out_dir, 'synthetic_map.npy')
         self.cfg_path = os.path.join(out_dir, 'map_config.json')
-
-        lats = [f['lat'] for f in all_frames if 'lat' in f]
-        lons = [f['lon'] for f in all_frames if 'lon' in f]
-
-        lat_range = max(lats) - min(lats)
-        lon_range = max(lons) - min(lons)
-
-        self.lat_min = min(lats) - lat_range * MARGIN
-        self.lat_max = max(lats) + lat_range * MARGIN
-        self.lon_min = min(lons) - lon_range * MARGIN
-        self.lon_max = max(lons) + lon_range * MARGIN
-
         os.makedirs(out_dir, exist_ok=True)
-        config = {
-            'lat_min': self.lat_min, 'lat_max': self.lat_max,
-            'lon_min': self.lon_min, 'lon_max': self.lon_max,
-            'map_h': MAP_H, 'map_w': MAP_W,
-        }
-        with open(self.cfg_path, 'w') as f:
-            json.dump(config, f)
 
-        if os.path.exists(self.map_path):
-            print("  Loading cached synthetic map...")
-            self.canvas = np.load(self.map_path)
+        real_map_path = os.path.join(out_dir, 'real_map.png')
+
+        if os.path.exists(real_map_path) and os.path.exists(self.cfg_path):
+            # Satellite map already downloaded by map_fetcher.py — use it.
+            print("  Loading real satellite map (real_map.png)...")
+            self.canvas   = cv2.imread(real_map_path, cv2.IMREAD_GRAYSCALE)
+            self.map_path = real_map_path
+            with open(self.cfg_path) as fh:
+                cfg = json.load(fh)
+            self.lat_min  = cfg['lat_min']
+            self.lat_max  = cfg['lat_max']
+            self.lon_min  = cfg['lon_min']
+            self.lon_max  = cfg['lon_max']
         else:
-            print("  Generating synthetic map (8000×4000 px)...")
-            self.canvas = _build_map()
-            np.save(self.map_path, self.canvas)
-            print(f"  Saved: {self.map_path}")
+            # Compute bounding box from all frames and build/load synthetic map.
+            lats = [f['lat'] for f in all_frames if 'lat' in f]
+            lons = [f['lon'] for f in all_frames if 'lon' in f]
+
+            lat_range = max(lats) - min(lats)
+            lon_range = max(lons) - min(lons)
+
+            self.lat_min = min(lats) - lat_range * MARGIN
+            self.lat_max = max(lats) + lat_range * MARGIN
+            self.lon_min = min(lons) - lon_range * MARGIN
+            self.lon_max = max(lons) + lon_range * MARGIN
+
+            config = {
+                'lat_min': self.lat_min, 'lat_max': self.lat_max,
+                'lon_min': self.lon_min, 'lon_max': self.lon_max,
+                'map_h': MAP_H, 'map_w': MAP_W,
+            }
+            with open(self.cfg_path, 'w') as fh:
+                json.dump(config, fh)
+
+            synth_path = os.path.join(out_dir, 'synthetic_map.npy')
+            self.map_path = synth_path
+            if os.path.exists(synth_path):
+                print("  Loading cached synthetic map...")
+                self.canvas = np.load(synth_path)
+            else:
+                print("  Generating synthetic map (8000×4000 px)...")
+                self.canvas = _build_map()
+                np.save(synth_path, self.canvas)
+                print(f"  Saved: {synth_path}")
+
+        self._map_h, self._map_w = self.canvas.shape
 
     @classmethod
     def from_saved(cls, out_dir: str) -> 'FeatureExtractor':
         """Load a previously built extractor without rebuilding the map."""
         cfg_path = os.path.join(out_dir, 'map_config.json')
-        map_path = os.path.join(out_dir, 'synthetic_map.npy')
-        if not os.path.exists(cfg_path) or not os.path.exists(map_path):
+        if not os.path.exists(cfg_path):
             raise FileNotFoundError(
-                f"map_config.json or synthetic_map.npy not found in {out_dir}. "
+                f"map_config.json not found in {out_dir}. "
                 "Run --mode preprocess first."
             )
-        with open(cfg_path) as f:
-            config = json.load(f)
+        with open(cfg_path) as fh:
+            config = json.load(fh)
 
         obj = object.__new__(cls)
         obj.out_dir  = out_dir
-        obj.map_path = map_path
         obj.cfg_path = cfg_path
         obj.lat_min  = config['lat_min']
         obj.lat_max  = config['lat_max']
         obj.lon_min  = config['lon_min']
         obj.lon_max  = config['lon_max']
-        obj.canvas   = np.load(map_path)
+
+        real_map_path = os.path.join(out_dir, 'real_map.png')
+        synth_path    = os.path.join(out_dir, 'synthetic_map.npy')
+
+        if os.path.exists(real_map_path):
+            print("  Loading real satellite map (real_map.png)...")
+            obj.canvas   = cv2.imread(real_map_path, cv2.IMREAD_GRAYSCALE)
+            obj.map_path = real_map_path
+        elif os.path.exists(synth_path):
+            obj.canvas   = np.load(synth_path)
+            obj.map_path = synth_path
+        else:
+            raise FileNotFoundError(
+                f"Neither real_map.png nor synthetic_map.npy found in {out_dir}. "
+                "Run --mode preprocess first."
+            )
+
+        obj._map_h, obj._map_w = obj.canvas.shape
         return obj
 
     def _gps_to_pixel(self, lat: float, lon: float):
-        row = int((self.lat_max - lat) / (self.lat_max - self.lat_min) * MAP_H)
-        col = int((lon - self.lon_min) / (self.lon_max - self.lon_min) * MAP_W)
+        row = int((self.lat_max - lat) / (self.lat_max - self.lat_min) * self._map_h)
+        col = int((lon - self.lon_min) / (self.lon_max - self.lon_min) * self._map_w)
         return row, col
 
     def extract_patch(self, frame: dict) -> np.ndarray:
@@ -155,9 +190,9 @@ class FeatureExtractor:
         )
 
         r0 = max(0, nw_row)
-        r1 = min(MAP_H, se_row)
+        r1 = min(self._map_h, se_row)
         c0 = max(0, nw_col)
-        c1 = min(MAP_W, se_col)
+        c1 = min(self._map_w, se_col)
 
         if r1 - r0 < 10 or c1 - c0 < 10:
             return np.zeros((PATCH_H, PATCH_W), dtype=np.uint8)
